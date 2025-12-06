@@ -23,20 +23,34 @@ const HomePage = () => {
   const [view, setView] = useState<View>("form");
   const [followUpValue, setFollowUpValue] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
-  const [conversation, setConversation] = useState<string[]>([]);
+  const [conversation, setConversation] = useState<
+    Array<{ id: number; user: string; reply: string }>
+  >([]);
+  const [replyIdx, setReplyIdx] = useState(0);
   const [dropOverlayActive, setDropOverlayActive] = useState(false);
   const [hoveredFileName, setHoveredFileName] = useState<string | null>(null);
 
-  const resetToForm = (options?: { clearConversation?: boolean }) => {
+  const cannedReplies = [
+    "Добавил новые меры поддержки и обновил расчёты под ваш запрос.",
+    "Подготовил список действий на ближайшие 2 недели и чек-лист документов.",
+    "Расширил анализ рисков и предложил план снижения издержек.",
+  ];
+
+  const takeNextReply = () => {
+    const reply = cannedReplies[replyIdx % cannedReplies.length];
+    setReplyIdx((prev) => (prev + 1) % cannedReplies.length);
+    return reply;
+  };
+
+  const resetToForm = () => {
     setView("form");
     setDroppedFileName(null);
     setSubmittedFileName(null);
     setInputValue("");
     setFollowUpValue("");
     setSubmittedQuery(null);
-    if (options?.clearConversation) {
-      setConversation([]);
-    }
+    setConversation([]);
+    setReplyIdx(0);
   };
 
   useEffect(() => {
@@ -116,10 +130,9 @@ const HomePage = () => {
     const isAutoPrompt = trimmed === AUTO_FILE_PROMPT;
     const shouldStoreQuery = Boolean(trimmed) && !isAutoPrompt;
     setSubmittedQuery(shouldStoreQuery ? trimmed : null);
-    if (shouldStoreQuery && !droppedFileName) {
-      setConversation((prev) => [...prev, trimmed]);
-    }
     if (droppedFileName) {
+      setConversation([]);
+      setReplyIdx(0);
       setSubmittedFileName(droppedFileName);
       setView("loading");
     }
@@ -128,7 +141,8 @@ const HomePage = () => {
   const handleFollowUpSubmit = () => {
     const trimmed = followUpValue.trim();
     if (!trimmed) return;
-    setConversation((prev) => [...prev, trimmed]);
+    const reply = takeNextReply();
+    setConversation((prev) => [...prev, { id: Date.now(), user: trimmed, reply }]);
     setFollowUpValue("");
   };
 
@@ -160,7 +174,7 @@ const HomePage = () => {
       return (
         <div className="relative z-10">
           {submittedFileName && (
-            <div className="flex justify-end  mb-[68px]">
+            <div className="flex justify-end mb-[68px]">
               <div className="p-[32px_24px_28px] bg-white/15 border border-white/15 rounded-[16px] flex gap-[12px] items-center">
                 <DescriptionIcon className="w-[40px] h-[40px]" />
                 <BodyText>{submittedFileName}</BodyText>
@@ -171,29 +185,16 @@ const HomePage = () => {
           <MockResult />
 
           {conversation.length > 0 && (
-            <div className="space-y-4 pt-2">
-              {conversation.map((message, idx) => (
-                <div key={`${message}-${idx}`} className="space-y-2">
+            <div className="flex flex-col gap-[40px] mt-[40px]">
+              {conversation.map((message) => (
+                <div key={message.id}>
                   <div className="flex justify-end">
-                    <div className="max-w-[70%] rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white/90 shadow-md">
-                      {message}
+                    <div className="p-[32px_24px_28px] bg-white/15 border border-white/15 rounded-[16px]">
+                      {message.user}
                     </div>
                   </div>
-                  <div className="flex justify-start">
-                    <div
-                      style={{
-                        width: "100%",
-                        minHeight: "34px",
-                        fontFamily: "'Veb Sans', sans-serif",
-                        fontStyle: "normal",
-                        fontWeight: 400,
-                        fontSize: "32px",
-                        lineHeight: "34px",
-                        color: "#FFFFFF",
-                      }}
-                    >
-                      {message}
-                    </div>
+                  <div className="flex justify-start my-[20px]">
+                    <div className="w-full text-[32px] leading-[34px]">{message.reply}</div>
                   </div>
                 </div>
               ))}
@@ -221,14 +222,7 @@ const HomePage = () => {
     <>
       <div className="relative min-h-screen bg-black text-white overflow-hidden">
         {view !== "loading" && <Background />}
-        <Header
-          showOverlay={view === "result"}
-          onLogoClickAction={() => {
-            const shouldClearConversation = view === "loading";
-
-            resetToForm({ clearConversation: shouldClearConversation });
-          }}
-        />
+        <Header showOverlay={view === "result"} onLogoClickAction={resetToForm} />
 
         <main className="mx-auto max-w-[1360px] pl-[40px] pr-[40px] pb-[296px] pt-[120px]">
           {renderContent()}

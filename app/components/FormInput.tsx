@@ -9,18 +9,8 @@ import DescriptionIcon from "@/app/assets/icons/description.svg";
 import CloseIcon from "@/app/assets/icons/close.svg";
 
 const placeholders = [
-  "Я",
-  "Я занимаюсь",
-  "Я занимаюсь агротехникой",
-  "Я занимаюсь агротехникой и",
-  "Я занимаюсь агротехникой и продаю",
   "Я занимаюсь агротехникой и продаю ковши",
-  "Организую",
-  "Организую тематические",
   "Организую тематические вечеринки",
-  "Занимаюсь",
-  "Занимаюсь строительством",
-  "Занимаюсь строительством по",
   "Занимаюсь строительством по тендерам",
 ];
 
@@ -45,38 +35,66 @@ const FormInputComponent = ({
 }: FormInputProps) => {
   const isFollowUp = variant === "followup";
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const [charIndex, setCharIndex] = useState(1);
+  const [typingPhase, setTypingPhase] = useState<"typing" | "pausing" | "deleting">("typing");
   const [interacted, setInteracted] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [hoverFileName, setHoverFileName] = useState<string | null>(null);
   const [overlayPos, setOverlayPos] = useState<{ x: number; y: number } | null>(null);
   const canSubmit = Boolean(inputValue.trim());
 
-  const intervalRef = useRef<number | null>(null);
   const inputWrapperRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (isFollowUp || interacted || view !== "form") {
-      if (intervalRef.current) {
-        window.clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    if (isFollowUp || interacted || view !== "form" || isDragging) {
       return;
     }
 
-    intervalRef.current = window.setInterval(
-      () => setPlaceholderIdx((prev) => (prev + 1) % placeholders.length),
-      500,
-    );
+    const currentPlaceholder = placeholders[placeholderIdx];
+    const reachedEnd = charIndex >= currentPlaceholder.length;
+    const reachedStart = charIndex <= 0;
+
+    const setNextPlaceholder = () => {
+      setTypingPhase("typing");
+      setPlaceholderIdx((prev) => (prev + 1) % placeholders.length);
+      setCharIndex(1);
+    };
+
+    const schedule = (callback: () => void, delay: number) => {
+      typingTimeoutRef.current = window.setTimeout(callback, delay);
+    };
+
+    if (typingPhase === "typing") {
+      if (!reachedEnd) {
+        schedule(() => setCharIndex((prev) => prev + 1), 70);
+      } else {
+        schedule(() => setTypingPhase("pausing"), 1200);
+      }
+    } else if (typingPhase === "pausing") {
+      schedule(() => setTypingPhase("deleting"), 800);
+    } else if (typingPhase === "deleting") {
+      if (!reachedStart) {
+        schedule(() => setCharIndex((prev) => prev - 1), 40);
+      } else {
+        setNextPlaceholder();
+      }
+    }
 
     return () => {
-      if (intervalRef.current) {
-        window.clearInterval(intervalRef.current);
-        intervalRef.current = null;
+      if (typingTimeoutRef.current) {
+        window.clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
       }
     };
-  }, [interacted, view]);
+  }, [charIndex, isDragging, isFollowUp, interacted, placeholderIdx, typingPhase, view]);
 
   useEffect(() => {
     if (isFollowUp) return;
@@ -185,11 +203,16 @@ const FormInputComponent = ({
     }
   }, [droppedFileName, isFollowUp, view]);
 
+  const animatedPlaceholder = placeholders[placeholderIdx].slice(
+    0,
+    Math.max(1, Math.min(charIndex, placeholders[placeholderIdx].length)),
+  );
+
   const currentPlaceholder = isFollowUp
     ? "Задайте уточняющий вопрос"
     : isDragging
       ? "Перетащите файл сюда"
-      : placeholders[placeholderIdx];
+      : animatedPlaceholder;
 
   const focusInput = () => {
     inputRef.current?.focus();
@@ -242,6 +265,8 @@ const FormInputComponent = ({
                   onInputChange("");
                   setInteracted(false);
                   setPlaceholderIdx(0);
+                  setCharIndex(1);
+                  setTypingPhase("typing");
                 }}
               >
                 <CloseIcon className="w-[32px] h-[32px]" />
